@@ -1,0 +1,17 @@
+# config/gold_tables.yaml
+# "Ban do" Gold layer. Doi business logic (RFM, cross-sell, cua so thoi gian) -> sua file nay.
+
+as_of_date: auto            # auto = max(txn_date) tren 2 fact silver; hoac set 'YYYY-MM-DD'
+lookback_months: 12         # cua so tinh txn (recency/frequency/monetary, txn_*_12m)
+
+rfm:
+  n_tiles: 5                # NTILE(5): R/F/M moi chieu diem 1..5
+
+thresholds:
+  digital_channels: ['ONLINE']     # channel tinh la digital; con lai (ATM/POS/BRANCH) = non-digital
+
+# Rule cross-sell -> noi suy thang vao SQL build_mart_360 (cot tham chieu phai co trong mart).
+crosssell:
+  loan_flag:   "NOT has_loan AND total_deposit_balance >= 50000000"
+  card_flag:   "NOT has_credit_card AND txn_count_12m >= 12"
+  invest_flag: "net_asset_value >= 200000000 AND customer_segment IN ('AFFLUENT','PREMIER')"

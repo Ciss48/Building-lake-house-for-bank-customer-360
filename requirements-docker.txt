@@ -1,0 +1,10 @@
+# ── Packages chạy trong DOCKER (tham khảo, không pip install file này) ────
+# File này chỉ để document, không dùng pip install trực tiếp.
+# Các package này đã có sẵn trong Docker images.
+
+# Spark container: bitnami/spark:3.5.1
+# pyspark==3.5.1
+
+# Airflow container: apache/airflow:2.9.3
+# apache-airflow==2.9.3
+# apache-airflow-providers-apache-spark==4.8.0

@@ -1,0 +1,55 @@
+# config/silver_tables.yaml
+# "Bản đồ" toàn bộ Silver layer — thêm bảng mới chỉ cần sửa file này (YAML-driven).
+#
+# type            : scd1 | scd2 | fact   (quyết định transform nào được dispatch)
+# source          : bảng Bronze nguồn (đọc từ nessie.bronze.<source>)
+# natural_key     : khoá tự nhiên (PK nghiệp vụ) — dùng cho dedup + MERGE ON
+# tracked_columns : (chỉ scd2) cột mà khi đổi giá trị → sinh version mới
+# attributes      : (chỉ scd2) cột giữ trong mỗi version nhưng KHÔNG trigger version mới
+# partition       : (chỉ fact) cột partition theo ngày
+
+tables:
+
+  dim_customer:
+    type: scd2
+    source: pg_customers
+    natural_key: customer_id
+    tracked_columns: [customer_segment, city, province, kyc_status]
+    attributes: [full_name, date_of_birth, gender, id_number, phone, email]
+
+  dim_account:
+    type: scd1
+    source: oracle_bank_accounts
+    natural_key: account_id
+
+  dim_card_account:
+    type: scd1
+    source: pg_card_accounts
+    natural_key: account_id
+
+  dim_product:
+    type: scd1
+    source: oracle_products
+    natural_key: product_id
+
+  dim_branch:
+    type: scd1
+    source: oracle_branches
+    natural_key: branch_id
+
+  dim_loan:
+    type: scd1
+    source: oracle_loans
+    natural_key: loan_id
+
+  fct_bank_transactions:
+    type: fact
+    source: oracle_bank_transactions
+    natural_key: txn_id
+    partition: txn_date
+
+  fct_card_transactions:
+    type: fact
+    source: pg_card_transactions
+    natural_key: txn_id
+    partition: txn_date

@@ -1,0 +1,67 @@
+# config/bronze_tables.yaml
+# Định nghĩa tất cả bảng Bronze cần ingest.
+# mode: full_snapshot | incremental
+# incremental_col: cột dùng để filter record mới (updated_at hoặc created_at)
+# partition_col: chỉ mang tính tài liệu — partition thật được khai báo trong create_bronze_tables.py
+#
+# Mỗi khi thêm bảng mới: sửa file này, KHÔNG cần sửa code Spark.
+
+sources:
+
+  oracle:
+    jdbc_url: "jdbc:oracle:thin:@//oracle-xe:1521/XEPDB1"
+    driver: "oracle.jdbc.OracleDriver"
+    user: "corebanking"
+    password_env: "ORACLE_PASSWORD"   # đọc từ biến môi trường trong container, không hardcode
+    tables:
+      - name: branches
+        bronze_table: bronze.oracle_branches
+        mode: full_snapshot             # bảng nhỏ, ít thay đổi → full mỗi lần
+        partition_col: null
+
+      - name: products
+        bronze_table: bronze.oracle_products
+        mode: full_snapshot
+        partition_col: null
+
+      - name: bank_accounts
+        bronze_table: bronze.oracle_bank_accounts
+        mode: incremental
+        incremental_col: updated_at
+        partition_col: opened_date
+
+      - name: loans
+        bronze_table: bronze.oracle_loans
+        mode: incremental
+        incremental_col: updated_at
+        partition_col: disbursement_date
+
+      - name: bank_transactions
+        bronze_table: bronze.oracle_bank_transactions
+        mode: incremental
+        incremental_col: created_at     # transactions không có updated_at
+        partition_col: txn_date
+
+  postgres:
+    jdbc_url: "jdbc:postgresql://postgres:5432/banking"
+    driver: "org.postgresql.Driver"
+    user: "postgres"
+    password_env: "POSTGRES_PASSWORD"
+    tables:
+      - name: customers
+        bronze_table: bronze.pg_customers
+        mode: incremental
+        incremental_col: updated_at
+        partition_col: null
+
+      - name: card_accounts
+        bronze_table: bronze.pg_card_accounts
+        mode: incremental
+        incremental_col: updated_at
+        partition_col: null
+
+      - name: card_transactions
+        bronze_table: bronze.pg_card_transactions
+        mode: incremental
+        incremental_col: created_at
+        partition_col: txn_date

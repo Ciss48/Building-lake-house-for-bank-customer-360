@@ -1,0 +1,13 @@
+# config/simulation.yaml
+# Tham so cadence cho generate_data.py --mode daily. Doi nhip = sua file nay (YAML-driven).
+
+slow:
+  new_customers_per_day: [0, 3]        # range KH moi moi ngay (kem 1 CURRENT account, doi khi card)
+  new_card_prob: 0.4                   # xac suat KH moi co them the
+  customer_change_rate: 0.01           # % KH doi customer_segment moi ngay (kich hoat SCD2)
+  npl_transition_rate: 0.01            # % khoan vay chuyen sang NPL moi ngay
+
+fast:
+  account_txn_participation: 0.30      # % tai khoan phat sinh giao dich trong ngay
+  bank_txns_per_account: [0, 4]        # range giao dich bank / account hoat dong
+  card_txns_per_account: [0, 3]        # range giao dich card / card account hoat dong

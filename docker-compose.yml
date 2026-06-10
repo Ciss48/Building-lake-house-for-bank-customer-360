@@ -1,0 +1,241 @@
+services:
+
+  # ── PostgreSQL (CRM + Card) ──────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: lakehouse-postgres
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-postgres.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Oracle XE (Core Banking) ─────────────────────────────────────────────
+  oracle-xe:
+    image: gvenzl/oracle-xe:21-slim-faststart
+    container_name: lakehouse-oracle
+    env_file: .env
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      ORACLE_DATABASE: XEPDB1
+      APP_USER: ${ORACLE_USER}
+      APP_USER_PASSWORD: ${ORACLE_PASSWORD}
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./scripts/init-oracle.sql:/container-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'SELECT 1 FROM DUAL;' | sqlplus -s ${ORACLE_USER}/${ORACLE_PASSWORD}@//localhost/XEPDB1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  # ── MinIO (Object Storage) ───────────────────────────────────────────────
+  minio:
+    image: minio/minio:RELEASE.2024-05-10T01-41-38Z
+    container_name: lakehouse-minio
+    command: server /data --console-address ":9001"
+    env_file: .env
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: lakehouse-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin123;
+      mc mb --ignore-existing local/lakehouse;
+      echo 'Bucket lakehouse created';
+      "
+
+  # ── Data Simulator (sinh data nguon theo ngay) ───────────────────────────
+  # Container chuyen dung: Airflow `docker exec` vao day chay generate_data.py
+  # --mode daily (giong pattern docker exec spark-master). Noi DB bang service
+  # name (postgres / oracle-xe) vi cung mang compose default. scripts/ + config/
+  # mount qua volume de sua nong.
+  data-simulator:
+    build: ./docker/simulator
+    image: lakehouse-simulator
+    container_name: lakehouse-data-simulator
+    env_file: .env
+    working_dir: /app
+    volumes:
+      - ./scripts:/app/scripts
+      - ./config:/app/config
+    command: ["sleep", "infinity"]
+    depends_on:
+      - postgres
+      - oracle-xe
+
+  # ── Nessie (Iceberg REST Catalog) ────────────────────────────────────────
+  # Phase 3: đổi version store IN_MEMORY -> ROCKSDB + named volume nessie-data
+  # để catalog (refs các bảng nessie.bronze/silver/gold) sống sót qua restart.
+  # IN_MEMORY mất sạch refs khi container restart -> phải reload toàn bộ (gotcha Phase 2).
+  nessie:
+    image: ghcr.io/projectnessie/nessie:0.79.0
+    container_name: lakehouse-nessie
+    ports:
+      - "19120:19120"
+    environment:
+      - QUARKUS_PROFILE=prod
+      - nessie.version.store.type=ROCKSDB
+      - nessie.version.store.persist.rocks.database-path=/nessie/data
+    volumes:
+      - nessie-data:/nessie/data
+
+  # ── Spark Cluster ────────────────────────────────────────────────────────
+  spark-master:
+    build: ./docker/spark
+    image: lakehouse-spark:3.5.1
+    container_name: lakehouse-spark-master
+    user: root
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+    # env_file: cấp ORACLE_PASSWORD, POSTGRES_PASSWORD, ICEBERG_WAREHOUSE, SPARK_MASTER_URL...
+    # cho các Spark job (get_jdbc_options đọc password từ ENV, không hardcode).
+    env_file: .env
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    ports:
+      - "8085:8080"
+      - "7077:7077"
+    volumes:
+      - ./src:/opt/spark/jobs
+      - ./config:/opt/spark/config
+
+  spark-worker:
+    build: ./docker/spark
+    image: lakehouse-spark:3.5.1
+    container_name: lakehouse-spark-worker
+    user: root
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+    env_file: .env
+    environment:
+      - SPARK_WORKER_MEMORY=3g
+      - SPARK_WORKER_CORES=2
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    depends_on:
+      - spark-master
+    volumes:
+      - ./src:/opt/spark/jobs
+      - ./config:/opt/spark/config
+
+  # ── Trino (SQL Query Engine cho Silver/Gold) ─────────────────────────────
+  # Iceberg connector + Nessie catalog (giống Spark, trỏ /api/v2) + MinIO S3.
+  # env_file cấp AWS_ACCESS_KEY_ID/SECRET cho ${ENV:...} trong iceberg.properties.
+  # Host port 8088 (8080 đã bị Airflow webserver chiếm). DBeaver: localhost:8088.
+  trino:
+    image: trinodb/trino:446
+    container_name: lakehouse-trino
+    env_file: .env
+    ports:
+      - "8088:8080"
+    volumes:
+      - ./docker/trino/etc:/etc/trino
+    depends_on:
+      - nessie
+      - minio
+
+  # ── Airflow (Orchestration) ──────────────────────────────────────────────
+  # Image custom (docker/airflow/Dockerfile) = apache/airflow + docker CLI.
+  # Metadata DB = database 'airflow' trong Postgres sẵn có.
+  # Trigger Spark qua `docker exec` vào spark-master (mount docker.sock).
+  airflow-init:
+    build: ./docker/airflow
+    image: lakehouse-airflow:2.9.3
+    container_name: lakehouse-airflow-init
+    user: "0:0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment: &airflow-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_AIRFLOW_DB}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username admin --password admin \
+          --firstname admin --lastname admin \
+          --role Admin --email admin@lakehouse.local || true
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - airflow-logs:/opt/airflow/logs
+
+  airflow-scheduler:
+    build: ./docker/airflow
+    image: lakehouse-airflow:2.9.3
+    container_name: lakehouse-airflow-scheduler
+    user: "0:0"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    env_file: .env
+    environment: *airflow-env
+    command: scheduler
+    restart: unless-stopped
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - airflow-logs:/opt/airflow/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  airflow-webserver:
+    build: ./docker/airflow
+    image: lakehouse-airflow:2.9.3
+    container_name: lakehouse-airflow-webserver
+    user: "0:0"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    env_file: .env
+    environment: *airflow-env
+    command: webserver
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - airflow-logs:/opt/airflow/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  postgres-data:
+  oracle-data:
+  minio-data:
+  airflow-logs:
+  nessie-data:

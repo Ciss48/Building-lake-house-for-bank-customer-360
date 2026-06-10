@@ -1,0 +1,28 @@
+# ── Packages chạy LOCAL (venv) ─────────────────────────────────────────────
+# Airflow và PySpark chạy trong Docker, KHÔNG cài vào venv này
+
+# Database connectors (để test kết nối, viết script hỗ trợ)
+psycopg2-binary==2.9.9
+oracledb==2.3.0
+
+# Object Storage
+boto3==1.34.131
+s3fs==2024.6.0
+
+# Data processing / exploration
+pandas==2.2.2
+pyarrow==16.1.0
+numpy==1.26.4
+
+# Iceberg / Nessie client (Python SDK để inspect catalog)
+pyiceberg==0.7.1
+pynessie==0.67.0
+
+# Notebooks
+jupyterlab==4.2.3
+ipykernel==6.29.5
+
+# Utilities
+python-dotenv==1.0.1
+pyyaml==6.0.1
+loguru==0.7.2
