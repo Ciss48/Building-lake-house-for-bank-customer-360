@@ -235,4 +235,3 @@ lakehouse-customer360/
 
 ## 👤 Tác giả
 Dự án portfolio Data Engineering — Lakehouse cho ngân hàng bán lẻ.
-Xem thêm **business narrative & talking points phỏng vấn** trong [`docs/business_value.md`](docs/business_value.md).
