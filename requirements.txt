@@ -4,6 +4,7 @@
 # Database connectors (để test kết nối, viết script hỗ trợ)
 psycopg2-binary==2.9.9
 oracledb==2.3.0
+trino==0.329.0          # client query Trino cho dashboard/export_mart.py
 
 # Object Storage
 boto3==1.34.131

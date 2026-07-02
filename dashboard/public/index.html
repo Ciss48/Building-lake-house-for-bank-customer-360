@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Customer 360 — Lakehouse Dashboard</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="style.css" />
+  <!-- ECharts (UMD global) -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+  <div id="loading"><div class="spinner"></div><p>Đang nạp dữ liệu (DuckDB-Wasm)…</p></div>
+
+  <header>
+    <div class="brand">
+      <h1>Customer&nbsp;360</h1>
+      <span class="sub">Lakehouse · Gold mart</span>
+    </div>
+    <div class="filters">
+      <label>Phân khúc
+        <select id="segFilter">
+          <option value="ALL">Tất cả</option>
+          <option value="MASS">MASS</option>
+          <option value="AFFLUENT">AFFLUENT</option>
+          <option value="PREMIER">PREMIER</option>
+        </select>
+      </label>
+      <label>Ngày snapshot
+        <select id="snapFilter"></select>
+      </label>
+      <label>Từ tháng
+        <select id="monthFrom"></select>
+      </label>
+      <label>Đến tháng
+        <select id="monthTo"></select>
+      </label>
+      <label id="granWrap">Xu hướng theo
+        <select id="granFilter"><option value="month">Tháng</option></select>
+      </label>
+      <span id="meta" class="meta"></span>
+    </div>
+  </header>
+
+  <!-- KPI cards -->
+  <section id="kpis" class="kpis"></section>
+
+  <!-- Tabs -->
+  <nav class="tabs">
+    <button class="tab active" data-tab="overview">Tổng quan</button>
+    <button class="tab" data-tab="trend">Xu hướng</button>
+    <button class="tab" data-tab="rfm">RFM</button>
+    <button class="tab" data-tab="product">Sản phẩm</button>
+    <button class="tab" data-tab="risk">Rủi ro &amp; Cross-sell</button>
+  </nav>
+
+  <main>
+    <section class="grid panel" data-panel="overview">
+      <div class="card"><h3>Cơ cấu phân khúc</h3><div class="chart" id="segDonut"></div></div>
+      <div class="card"><h3>Độ phủ sản phẩm</h3><div class="chart" id="penBar"></div></div>
+      <div class="card"><h3>Khách hàng theo phân khúc RFM</h3><div class="chart" id="rfmBar"></div></div>
+      <div class="card"><h3>Phân bố theo tỉnh/thành</h3><div class="chart" id="provBar"></div></div>
+    </section>
+
+    <section class="grid panel hidden" data-panel="trend">
+      <div class="card"><h3>Giá trị &amp; số lượng giao dịch theo tháng</h3><div class="chart" id="txnTrend"></div></div>
+      <div class="card"><h3>Khách hàng giao dịch theo tháng</h3><div class="chart" id="activeTrend"></div></div>
+      <div class="card"><h3>Cơ cấu kênh giao dịch theo tháng</h3><div class="chart" id="channelTrend"></div></div>
+      <div class="card"><h3>Tăng trưởng KH &amp; huy động theo snapshot</h3><div class="chart" id="snapTrend"></div></div>
+    </section>
+
+    <section class="grid panel hidden" data-panel="rfm">
+      <div class="card"><h3>Lưới RFM (Recency × Frequency)</h3><div class="chart" id="rfmHeat"></div></div>
+      <div class="card"><h3>Quy mô phân khúc</h3><div class="chart" id="rfmTree"></div></div>
+      <div class="card"><h3>Huy động theo phân khúc (Tỷ VND)</h3><div class="chart" id="aumSeg"></div></div>
+      <div class="card"><h3>Recency vs Monetary (mỗi điểm = 1 KH)</h3><div class="chart" id="rmScatter"></div></div>
+    </section>
+
+    <section class="grid panel hidden" data-panel="product">
+      <div class="card"><h3>Số sản phẩm nắm giữ</h3><div class="chart" id="prodCount"></div></div>
+      <div class="card"><h3>Phân bố quy mô huy động (AUM)</h3><div class="chart" id="aumBand"></div></div>
+      <div class="card"><h3>Độ phủ sản phẩm theo phân khúc</h3><div class="chart" id="penSeg"></div></div>
+      <div class="card"><h3>Danh mục chi tiêu phổ biến</h3><div class="chart" id="catBar"></div></div>
+    </section>
+
+    <section class="grid panel hidden" data-panel="risk">
+      <div class="card"><h3>Tỷ lệ nợ xấu / người vay theo phân khúc</h3><div class="chart" id="nplSeg"></div></div>
+      <div class="card"><h3>Cơ hội bán chéo (số lead)</h3><div class="chart" id="leadBar"></div></div>
+      <div class="card"><h3>Lead bán chéo theo phân khúc</h3><div class="chart" id="leadSeg"></div></div>
+      <div class="card"><h3>Phân bố tỷ lệ sử dụng hạn mức thẻ</h3><div class="chart" id="utilBand"></div></div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Dữ liệu snapshot tĩnh · query client-side bằng DuckDB-Wasm · không có backend</span>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
